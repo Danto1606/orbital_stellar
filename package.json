@@ -1,0 +1,9 @@
+{
+  "name": "orbit-stellar",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {},
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
