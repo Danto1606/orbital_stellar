@@ -17,4 +17,4 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install
-      - run: echo "Build placeholder — implement package builds"
+      - run: pnpm build

@@ -2,8 +2,11 @@
   "name": "@orbital/pulse-core",
   "private": true,
   "version": "0.0.0",
-  "main": "./src/index.ts",
-  "scripts": {},
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
   "dependencies": {
     "@stellar/stellar-sdk": "^14.6.1"
   },

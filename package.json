@@ -2,7 +2,10 @@
   "name": "orbit-stellar",
   "private": true,
   "version": "0.0.0",
-  "scripts": {},
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" run build",
+    "test": "pnpm -r --if-present test"
+  },
   "devDependencies": {
     "typescript": "^5.4.0"
   }
