@@ -2,21 +2,40 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]   # all branches, not just main
   pull_request:
-    branches: [main]
+    branches: ["**"]   # all branches, not just main
 
 jobs:
   ci:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v2
         with:
           version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-      - run: pnpm install
-      - run: echo "CI placeholder — implement lint, typecheck and test"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck pulse-core
+        run: pnpm tsc --noEmit -p packages/pulse-core/tsconfig.json
+
+      - name: Typecheck pulse-webhooks
+        run: pnpm tsc --noEmit -p packages/pulse-webhooks/tsconfig.json
+
+      - name: Typecheck pulse-notify
+        run: pnpm tsc --noEmit -p packages/pulse-notify/tsconfig.json
+
+      - name: Typecheck apps/web
+        run: pnpm tsc --noEmit -p apps/web/tsconfig.json
+
+      - name: Test
+        run: pnpm -r --if-present test
