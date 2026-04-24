@@ -1,8 +1,52 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
 **/node_modules/
-coverage
-dist
-build
-.next
-**/.env.local
-**/.env.development.local
-.claude
+.pnp
+.pnp.js
+
+# ── Build outputs ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+**/*.tsbuildinfo
+
+# ── Test & coverage ───────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.test
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Misc tooling ──────────────────────────────────────────────────────────────
+.turbo/
+.vercel/
+.claude/
+
+# ── Internal / not for contributors ──────────────────────────────────────────
+.github/WAVE_ISSUES.md
