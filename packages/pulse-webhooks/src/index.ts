@@ -19,7 +19,7 @@ export class WebhookDelivery {
     });
 
     this.watcher.on("*", (event) => {
-      this.deliver(event);
+      if ("raw" in event) this.deliver(event);
     });
   }
 
