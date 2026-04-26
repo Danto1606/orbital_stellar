@@ -16,7 +16,7 @@ vi.mock("@stellar/stellar-sdk", () => {
   class MockServer {
     constructor(_url: string) {}
 
-    payments() {
+    operations() {
       return {
         cursor() {
           return {
@@ -213,5 +213,168 @@ describe("pulse-core EventEngine", () => {
         delayMs: 1000,
       })
     );
+  });
+
+  describe("set_options → account.options_changed", () => {
+    function makeSetOptionsRecord(
+      overrides: Record<string, unknown>
+    ): Record<string, unknown> {
+      return {
+        type: "set_options",
+        source_account: "GSRC",
+        created_at: "2026-04-24T10:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    it("emits account.options_changed with signer_added when signer_weight > 0", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ signer_key: "GNEWSIGNER", signer_weight: 2 })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "account.options_changed",
+          source: "GSRC",
+          changes: { signer_added: { key: "GNEWSIGNER", weight: 2 } },
+          timestamp: "2026-04-24T10:00:00.000Z",
+        })
+      );
+    });
+
+    it("emits account.options_changed with signer_removed when signer_weight is 0", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ signer_key: "GOLDSIGNER", signer_weight: 0 })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "account.options_changed",
+          source: "GSRC",
+          changes: { signer_removed: { key: "GOLDSIGNER", weight: 0 } },
+        })
+      );
+    });
+
+    it("emits account.options_changed with thresholds when any threshold field is present", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({
+          low_threshold: 1,
+          med_threshold: 2,
+          high_threshold: 3,
+          master_key_weight: 1,
+        })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "account.options_changed",
+          source: "GSRC",
+          changes: {
+            thresholds: {
+              low_threshold: 1,
+              med_threshold: 2,
+              high_threshold: 3,
+              master_key_weight: 1,
+            },
+          },
+        })
+      );
+    });
+
+    it("emits account.options_changed with home_domain when home_domain is present", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ home_domain: "example.com" })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "account.options_changed",
+          source: "GSRC",
+          changes: { home_domain: "example.com" },
+        })
+      );
+    });
+
+    it("only includes fields that are actually present in changes", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ home_domain: "stellar.org", low_threshold: 5 })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      const payload = handler.mock.calls[0]![0];
+      expect(payload.changes).toEqual({
+        home_domain: "stellar.org",
+        thresholds: { low_threshold: 5 },
+      });
+      expect(payload.changes).not.toHaveProperty("signer_added");
+      expect(payload.changes).not.toHaveProperty("signer_removed");
+    });
+
+    it("does not emit when set_options has no recognized changed fields", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const watcher = engine.subscribe("GSRC");
+      const handler = vi.fn();
+      watcher.on("account.options_changed", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ set_flags: 1 })
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("does not route account.options_changed to unrelated watchers", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const srcWatcher = engine.subscribe("GSRC");
+      const otherWatcher = engine.subscribe("GOTHER");
+      const srcHandler = vi.fn();
+      const otherHandler = vi.fn();
+      srcWatcher.on("account.options_changed", srcHandler);
+      otherWatcher.on("account.options_changed", otherHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetOptionsRecord({ home_domain: "example.com" })
+      );
+
+      expect(srcHandler).toHaveBeenCalledOnce();
+      expect(otherHandler).not.toHaveBeenCalled();
+    });
   });
 });
