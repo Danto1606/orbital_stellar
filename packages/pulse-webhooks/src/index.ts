@@ -3,27 +3,44 @@ import type { NormalizedEvent, Watcher } from "@orbital/pulse-core";
 import type { WebhookConfig } from "./types.js";
 export type { WebhookConfig } from "./types.js";
 
+type ResolvedWebhookConfig = Omit<Required<WebhookConfig>, "url"> & {
+  urls: string[];
+};
+
 // --- WebhookDelivery ---
 
 export class WebhookDelivery {
-  private config: Required<WebhookConfig>;
+  private config: ResolvedWebhookConfig;
   private watcher: Watcher;
   private retryTimers: Set<ReturnType<typeof setTimeout>> = new Set();
 
   constructor(watcher: Watcher, config: WebhookConfig) {
     this.watcher = watcher;
-    this.config = { retries: 3, deliveryTimeoutMs: 10000, ...config };
+    this.config = {
+      retries: 3,
+      deliveryTimeoutMs: 10000,
+      ...config,
+      urls: Array.isArray(config.url) ? [...config.url] : [config.url],
+    };
 
     this.watcher.addStopHandler(() => {
       this.clearRetryTimers();
     });
 
     this.watcher.on("*", (event) => {
-      if ("raw" in event) this.deliver(event);
+      if ("raw" in event) {
+        for (const url of this.config.urls) {
+          void this.deliverToUrl(event, url);
+        }
+      }
     });
   }
 
-  private async deliver(event: NormalizedEvent, attempt = 1): Promise<void> {
+  private async deliverToUrl(
+    event: NormalizedEvent,
+    url: string,
+    attempt = 1
+  ): Promise<void> {
     if (this.watcher.stopped) return;
 
     const payload = JSON.stringify(event);
@@ -33,7 +50,7 @@ export class WebhookDelivery {
     const abortTimer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetch(this.config.url, {
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -54,7 +71,7 @@ export class WebhookDelivery {
         const delay = Math.pow(2, attempt - 1) * 1000;
         const retryTimer = setTimeout(() => {
           this.retryTimers.delete(retryTimer);
-          void this.deliver(event, attempt + 1);
+          void this.deliverToUrl(event, url, attempt + 1);
         }, delay);
         this.retryTimers.add(retryTimer);
       } else {
@@ -63,7 +80,7 @@ export class WebhookDelivery {
           type: event.type,
           raw: {
             error: errorMessage,
-            url: this.config.url,
+            url,
             attempts: attempt,
             originalEvent: event,
           },
