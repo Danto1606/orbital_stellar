@@ -9,6 +9,8 @@ export type Network = "mainnet" | "testnet";
 export type PaymentEventType = "payment.received" | "payment.sent";
 /** Event type for account options changes. */
 export type AccountOptionsEventType = "account.options_changed";
+/** Event types for trustline authorization changes. */
+export type TrustlineEventType = "trustline.authorized" | "trustline.deauthorized";
 /** Notification types emitted by the EventEngine during reconnection. */
 export type WatcherNotificationType =
   | "engine.reconnecting"
@@ -86,7 +88,27 @@ export type AccountOptionsEvent = {
 /**
  * A union of all normalized events supported by pulse-core.
  */
-export type NormalizedEvent = PaymentEvent | AccountOptionsEvent;
+export type NormalizedEvent = PaymentEvent | AccountOptionsEvent | TrustlineEvent;
+
+/**
+ * A normalized trustline authorization change event from the Stellar network.
+ */
+export type TrustlineEvent = {
+  /** The type of trustline event (authorized or deauthorized). */
+  type: TrustlineEventType;
+  /** The Stellar account that holds the trustline. */
+  trustor: string;
+  /** The asset issuer (source of the operation). */
+  issuer: string;
+  /** The asset being authorized (e.g., "XLM" or "ASSET:issuer"). */
+  asset: string;
+  /** ISO 8601 timestamp of the authorization change. */
+  timestamp: string;
+  /** The original Horizon operation type ("allow_trust" or "set_trust_line_flags"). */
+  operation: string;
+  /** The original raw record from the Horizon API. */
+  raw: unknown;
+};
 
 /**
  * A notification emitted by the EventEngine during reconnection attempts.

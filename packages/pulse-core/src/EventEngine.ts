@@ -10,12 +10,14 @@ import type {
   PaymentEvent,
   PaymentEventType,
   ReconnectConfig,
+  TrustlineEvent,
+  TrustlineEventType,
   WatcherNotification,
   WatcherNotificationType,
 } from "./index.js";
 
 type PendingPaymentEvent = Omit<PaymentEvent, "type"> & { type: "unknown" };
-type NormalizedEventOrPending = PendingPaymentEvent | AccountOptionsEvent;
+type NormalizedEventOrPending = PendingPaymentEvent | AccountOptionsEvent | TrustlineEvent;
 
 type StreamCallbacks = {
   onmessage: (record: unknown) => void;
@@ -258,6 +260,14 @@ export class EventEngine {
       return this.normalizeSetOptions(r, record);
     }
 
+    if (r.type === "allow_trust") {
+      return this.normalizeAllowTrust(r, record);
+    }
+
+    if (r.type === "set_trust_line_flags") {
+      return this.normalizeSetTrustLineFlags(r, record);
+    }
+
     return null;
   }
 
@@ -305,6 +315,78 @@ export class EventEngine {
     };
   }
 
+  private normalizeAllowTrust(
+    r: Record<string, unknown>,
+    raw: unknown
+  ): TrustlineEvent | null {
+    const trustor = r.trustor;
+    const trustee = r.trustee ?? r.source_account;
+    const authorize = r.authorize;
+
+    if (typeof trustor !== "string" || trustor === "") return null;
+    if (typeof trustee !== "string" || trustee === "") return null;
+    if (typeof authorize !== "boolean") return null;
+
+    const asset = this.buildAsset(r);
+    const type: TrustlineEventType = authorize ? "trustline.authorized" : "trustline.deauthorized";
+
+    return {
+      type,
+      trustor,
+      issuer: trustee as string,
+      asset,
+      timestamp: r.created_at as string,
+      operation: "allow_trust",
+      raw,
+    };
+  }
+
+  private normalizeSetTrustLineFlags(
+    r: Record<string, unknown>,
+    raw: unknown
+  ): TrustlineEvent | null {
+    const trustor = r.trustor;
+    const source = r.source_account;
+
+    if (typeof trustor !== "string" || trustor === "") return null;
+    if (typeof source !== "string" || source === "") return null;
+
+    const asset = this.buildAsset(r);
+    const type = this.resolveTrustlineType(r);
+    if (type === null) return null;
+
+    return {
+      type,
+      trustor,
+      issuer: source as string,
+      asset,
+      timestamp: r.created_at as string,
+      operation: "set_trust_line_flags",
+      raw,
+    };
+  }
+
+  private buildAsset(r: Record<string, unknown>): string {
+    if (r.asset_type === "native") return "XLM";
+    const code = r.asset_code ?? "";
+    const issuer = r.asset_issuer ?? "";
+    return `${code}:${issuer}`;
+  }
+
+  private resolveTrustlineType(r: Record<string, unknown>): TrustlineEventType | null {
+    const setFlagsS = r.set_flags_s as string[] | undefined;
+    const clearFlagsS = r.clear_flags_s as string[] | undefined;
+
+    const isSettingAuth = setFlagsS?.includes("authorized");
+    const isClearingAuth = clearFlagsS?.includes("authorized");
+
+    if (isSettingAuth && !isClearingAuth) return "trustline.authorized";
+    if (isClearingAuth && !isSettingAuth) return "trustline.deauthorized";
+    if (isSettingAuth && isClearingAuth) return null;
+
+    return null;
+  }
+
   private route(event: NormalizedEventOrPending): void {
     if (event.type === "account.options_changed") {
       const watcher = this.registry.get(event.source);
@@ -315,22 +397,39 @@ export class EventEngine {
       return;
     }
 
-    const toWatcher = this.registry.get(event.to);
+    if (event.type === "trustline.authorized" || event.type === "trustline.deauthorized") {
+      const issuerWatcher = this.registry.get(event.issuer);
+      if (issuerWatcher) {
+        issuerWatcher.emit(event.type, event);
+        issuerWatcher.emit("*", event);
+      }
+
+      const trustorWatcher = this.registry.get(event.trustor);
+      if (trustorWatcher) {
+        trustorWatcher.emit(event.type, event);
+        trustorWatcher.emit("*", event);
+      }
+      return;
+    }
+
+    const payment = event as PendingPaymentEvent;
+
+    const toWatcher = this.registry.get(payment.to);
     if (toWatcher) {
       toWatcher.emit(
         "payment.received",
-        this.withResolvedType(event, "payment.received")
+        this.withResolvedType(payment, "payment.received")
       );
-      toWatcher.emit("*", this.withResolvedType(event, "payment.received"));
+      toWatcher.emit("*", this.withResolvedType(payment, "payment.received"));
     }
 
-    const fromWatcher = this.registry.get(event.from);
+    const fromWatcher = this.registry.get(payment.from);
     if (fromWatcher) {
       fromWatcher.emit(
         "payment.sent",
-        this.withResolvedType(event, "payment.sent")
+        this.withResolvedType(payment, "payment.sent")
       );
-      fromWatcher.emit("*", this.withResolvedType(event, "payment.sent"));
+      fromWatcher.emit("*", this.withResolvedType(payment, "payment.sent"));
     }
   }
 

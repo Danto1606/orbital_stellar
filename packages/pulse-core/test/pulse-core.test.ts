@@ -445,4 +445,248 @@ describe("pulse-core EventEngine", () => {
       expect(otherHandler).not.toHaveBeenCalled();
     });
   });
+
+  describe("allow_trust → trustline.authorized / trustline.deauthorized", () => {
+    function makeAllowTrustRecord(
+      overrides: Record<string, unknown>
+    ): Record<string, unknown> {
+      return {
+        type: "allow_trust",
+        source_account: "GISSUER",
+        trustee: "GISSUER",
+        trustor: "GTRUSTOR",
+        asset_type: "credit_alphanum4",
+        asset_code: "USDC",
+        asset_issuer: "GISSUER",
+        created_at: "2026-04-24T10:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    it("emits trustline.authorized when authorize is true", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const trustorWatcher = engine.subscribe("GTRUSTOR");
+      const issuerHandler = vi.fn();
+      const trustorHandler = vi.fn();
+      issuerWatcher.on("trustline.authorized", issuerHandler);
+      trustorWatcher.on("trustline.authorized", trustorHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeAllowTrustRecord({ authorize: true })
+      );
+
+      expect(issuerHandler).toHaveBeenCalledOnce();
+      expect(trustorHandler).toHaveBeenCalledOnce();
+      expect(issuerHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "trustline.authorized",
+          trustor: "GTRUSTOR",
+          issuer: "GISSUER",
+          asset: "USDC:GISSUER",
+          operation: "allow_trust",
+          timestamp: "2026-04-24T10:00:00.000Z",
+        })
+      );
+    });
+
+    it("emits trustline.deauthorized when authorize is false", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const trustorWatcher = engine.subscribe("GTRUSTOR");
+      const issuerHandler = vi.fn();
+      const trustorHandler = vi.fn();
+      issuerWatcher.on("trustline.deauthorized", issuerHandler);
+      trustorWatcher.on("trustline.deauthorized", trustorHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeAllowTrustRecord({ authorize: false })
+      );
+
+      expect(issuerHandler).toHaveBeenCalledOnce();
+      expect(trustorHandler).toHaveBeenCalledOnce();
+      expect(issuerHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "trustline.deauthorized",
+          trustor: "GTRUSTOR",
+          issuer: "GISSUER",
+          asset: "USDC:GISSUER",
+          operation: "allow_trust",
+        })
+      );
+    });
+
+    it("does not emit to unrelated watchers", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      engine.subscribe("GISSUER");
+      const otherWatcher = engine.subscribe("GOTHER");
+      const otherHandler = vi.fn();
+      otherWatcher.on("trustline.authorized", otherHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeAllowTrustRecord({ authorize: true })
+      );
+
+      expect(otherHandler).not.toHaveBeenCalled();
+    });
+
+    it("handles native asset correctly", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const handler = vi.fn();
+      issuerWatcher.on("trustline.authorized", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeAllowTrustRecord({
+          asset_type: "native",
+          asset_code: undefined,
+          asset_issuer: undefined,
+          authorize: true,
+        })
+      );
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          asset: "XLM",
+        })
+      );
+    });
+  });
+
+  describe("set_trust_line_flags → trustline.authorized / trustline.deauthorized", () => {
+    function makeSetTrustLineFlagsRecord(
+      overrides: Record<string, unknown>
+    ): Record<string, unknown> {
+      return {
+        type: "set_trust_line_flags",
+        source_account: "GISSUER",
+        trustor: "GTRUSTOR",
+        asset_type: "credit_alphanum4",
+        asset_code: "USDC",
+        asset_issuer: "GISSUER",
+        set_flags_s: [],
+        clear_flags_s: [],
+        created_at: "2026-04-24T10:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    it("emits trustline.authorized when authorized flag is set", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const trustorWatcher = engine.subscribe("GTRUSTOR");
+      const issuerHandler = vi.fn();
+      const trustorHandler = vi.fn();
+      issuerWatcher.on("trustline.authorized", issuerHandler);
+      trustorWatcher.on("trustline.authorized", trustorHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetTrustLineFlagsRecord({
+          set_flags_s: ["authorized"],
+          clear_flags_s: [],
+        })
+      );
+
+      expect(issuerHandler).toHaveBeenCalledOnce();
+      expect(trustorHandler).toHaveBeenCalledOnce();
+      expect(issuerHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "trustline.authorized",
+          trustor: "GTRUSTOR",
+          issuer: "GISSUER",
+          asset: "USDC:GISSUER",
+          operation: "set_trust_line_flags",
+          timestamp: "2026-04-24T10:00:00.000Z",
+        })
+      );
+    });
+
+    it("emits trustline.deauthorized when authorized flag is cleared", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const trustorWatcher = engine.subscribe("GTRUSTOR");
+      const issuerHandler = vi.fn();
+      const trustorHandler = vi.fn();
+      issuerWatcher.on("trustline.deauthorized", issuerHandler);
+      trustorWatcher.on("trustline.deauthorized", trustorHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetTrustLineFlagsRecord({
+          set_flags_s: [],
+          clear_flags_s: ["authorized"],
+        })
+      );
+
+      expect(issuerHandler).toHaveBeenCalledOnce();
+      expect(trustorHandler).toHaveBeenCalledOnce();
+      expect(issuerHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "trustline.deauthorized",
+          trustor: "GTRUSTOR",
+          issuer: "GISSUER",
+          asset: "USDC:GISSUER",
+          operation: "set_trust_line_flags",
+        })
+      );
+    });
+
+    it("does not emit when authorized flag is both set and cleared", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const handler = vi.fn();
+      issuerWatcher.on("trustline.authorized", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetTrustLineFlagsRecord({
+          set_flags_s: ["authorized"],
+          clear_flags_s: ["authorized"],
+        })
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("does not emit when no authorization flag changes", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      const issuerWatcher = engine.subscribe("GISSUER");
+      const handler = vi.fn();
+      issuerWatcher.on("trustline.authorized", handler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetTrustLineFlagsRecord({
+          set_flags_s: ["clawback_enabled"],
+          clear_flags_s: [],
+        })
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("does not route to unrelated watchers", () => {
+      const engine = new EventEngine({ network: "testnet" });
+      engine.subscribe("GISSUER");
+      const otherWatcher = engine.subscribe("GOTHER");
+      const otherHandler = vi.fn();
+      otherWatcher.on("trustline.authorized", otherHandler);
+
+      engine.start();
+      latestStream().handlers.onmessage(
+        makeSetTrustLineFlagsRecord({
+          set_flags_s: ["authorized"],
+          clear_flags_s: [],
+        })
+      );
+
+      expect(otherHandler).not.toHaveBeenCalled();
+    });
+  });
 });
